@@ -1,0 +1,393 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function allowedUserFields() {
+      return [
+        'userId', 'username', 'email', 'level', 'wins', 'createdAt', 'updatedAt',
+        'championCount', 'bestTimeSec', 'bestHighScore', 'spendablePoints',
+        'playerLevel', 'playerXp', 'totalCatsSaved', 'bestEndlessCats',
+        'totalGhostsScared', 'totalItemsUsed', 'totalDashesUsed', 'totalSonicsUsed',
+        'selectedSkinId', 'discoveredItemsCsv', 'unlockedAchievementsCsv',
+        'purchasedSkinsCsv', 'purchasedModesCsv', 'purchasedItemsCsv',
+        'tradedAwaySkinsCsv', 'reviveCount', 'saveUpdatedAt'
+      ];
+    }
+
+    function isValidCsvField(val) {
+      return val is string && val.size() <= 4096;
+    }
+
+    function isValidUserProfile(data) {
+      return data.userId is string &&
+             data.userId.size() >= 1 &&
+             data.userId.size() <= 128 &&
+             data.username is string &&
+             data.username.size() >= 3 &&
+             data.username.size() <= 24 &&
+             data.email is string &&
+             data.email.size() <= 120 &&
+             data.level is int &&
+             data.level >= 1 &&
+             data.level <= 9999 &&
+             data.wins is int &&
+             data.wins >= 0 &&
+             data.wins <= 999999 &&
+             data.createdAt is timestamp &&
+             data.createdAt <= request.time &&
+             data.updatedAt is timestamp &&
+             data.updatedAt <= request.time &&
+             (!('championCount' in data) || (data.championCount is int && data.championCount >= 0 && data.championCount <= 999999)) &&
+             (!('bestTimeSec' in data) || (data.bestTimeSec is number && data.bestTimeSec >= 0 && data.bestTimeSec <= 999999)) &&
+             (!('bestHighScore' in data) || (data.bestHighScore is int && data.bestHighScore >= 0 && data.bestHighScore <= 99999999)) &&
+             (!('spendablePoints' in data) || (data.spendablePoints is int && data.spendablePoints >= 0 && data.spendablePoints <= 99999999)) &&
+             (!('playerLevel' in data) || (data.playerLevel is int && data.playerLevel >= 1 && data.playerLevel <= 9999)) &&
+             (!('playerXp' in data) || (data.playerXp is int && data.playerXp >= 0 && data.playerXp <= 9999999)) &&
+             (!('totalCatsSaved' in data) || (data.totalCatsSaved is int && data.totalCatsSaved >= 0 && data.totalCatsSaved <= 9999999)) &&
+             (!('bestEndlessCats' in data) || (data.bestEndlessCats is int && data.bestEndlessCats >= 0 && data.bestEndlessCats <= 999999)) &&
+             (!('totalGhostsScared' in data) || (data.totalGhostsScared is int && data.totalGhostsScared >= 0 && data.totalGhostsScared <= 999999)) &&
+             (!('totalItemsUsed' in data) || (data.totalItemsUsed is int && data.totalItemsUsed >= 0 && data.totalItemsUsed <= 999999)) &&
+             (!('totalDashesUsed' in data) || (data.totalDashesUsed is int && data.totalDashesUsed >= 0 && data.totalDashesUsed <= 999999)) &&
+             (!('totalSonicsUsed' in data) || (data.totalSonicsUsed is int && data.totalSonicsUsed >= 0 && data.totalSonicsUsed <= 999999)) &&
+             (!('selectedSkinId' in data) || (data.selectedSkinId is string && data.selectedSkinId.size() <= 64)) &&
+             (!('discoveredItemsCsv' in data) || isValidCsvField(data.discoveredItemsCsv)) &&
+             (!('unlockedAchievementsCsv' in data) || isValidCsvField(data.unlockedAchievementsCsv)) &&
+             (!('purchasedSkinsCsv' in data) || isValidCsvField(data.purchasedSkinsCsv)) &&
+             (!('purchasedModesCsv' in data) || isValidCsvField(data.purchasedModesCsv)) &&
+             (!('purchasedItemsCsv' in data) || isValidCsvField(data.purchasedItemsCsv)) &&
+             (!('tradedAwaySkinsCsv' in data) || isValidCsvField(data.tradedAwaySkinsCsv)) &&
+             (!('reviveCount' in data) || (data.reviveCount is int && data.reviveCount >= 0 && data.reviveCount <= 9999)) &&
+             (!('saveUpdatedAt' in data) || (data.saveUpdatedAt is timestamp && data.saveUpdatedAt <= request.time));
+    }
+
+    function isValidRoom(data) {
+      return data.code is string &&
+             data.code.size() == 6 &&
+             data.code.matches('^[A-Z0-9]{6}$') &&
+             data.isPublic is bool &&
+             data.status in ['waiting', 'playing', 'finished'] &&
+             data.difficulty in ['NORMAL', 'CALMO', 'DESAFIO', 'ELITE'] &&
+             data.maxPlayers is int &&
+             data.maxPlayers >= 2 &&
+             data.maxPlayers <= 200 &&
+             data.playerCount is int &&
+             data.playerCount >= 0 &&
+             data.playerCount <= 200 &&
+             data.ghostPlayerUserId is string &&
+             data.ghostPlayerUserId.size() <= 128 &&
+             data.hostUserId is string &&
+             data.hostUserId.size() >= 1 &&
+             data.hostUserId.size() <= 128 &&
+             data.hostUsername is string &&
+             data.hostUsername.size() >= 1 &&
+             data.hostUsername.size() <= 24 &&
+             data.guestUserId is string &&
+             data.guestUserId.size() <= 128 &&
+             data.guestUsername is string &&
+             data.guestUsername.size() <= 24 &&
+             data.hostX is number &&
+             data.hostX >= 0 &&
+             data.hostX <= 2000 &&
+             data.hostY is number &&
+             data.hostY >= 0 &&
+             data.hostY <= 3000 &&
+             data.hostScore is int &&
+             data.hostScore >= 0 &&
+             data.hostScore <= 9999 &&
+             data.guestX is number &&
+             data.guestX >= 0 &&
+             data.guestX <= 2000 &&
+             data.guestY is number &&
+             data.guestY >= 0 &&
+             data.guestY <= 3000 &&
+             data.guestScore is int &&
+             data.guestScore >= 0 &&
+             data.guestScore <= 9999 &&
+             data.targetCats is int &&
+             data.targetCats >= 1 &&
+             data.targetCats <= 100 &&
+             data.winnerUserId is string &&
+             data.winnerUserId.size() <= 128 &&
+             data.winnerUsername is string &&
+             data.winnerUsername.size() <= 24 &&
+             data.createdAt is timestamp &&
+             data.createdAt <= request.time &&
+             data.updatedAt is timestamp &&
+             data.updatedAt <= request.time;
+    }
+
+    function isValidRoomPlayer(data) {
+      return data.userId is string &&
+             data.userId.size() >= 1 &&
+             data.userId.size() <= 128 &&
+             data.username is string &&
+             data.username.size() >= 1 &&
+             data.username.size() <= 24 &&
+             data.x is number &&
+             data.x >= 0 &&
+             data.x <= 2000 &&
+             data.y is number &&
+             data.y >= 0 &&
+             data.y <= 3000 &&
+             data.score is int &&
+             data.score >= 0 &&
+             data.score <= 9999 &&
+             data.role in ['cat', 'ghost'] &&
+             data.skinId is string &&
+             data.skinId.size() <= 64 &&
+             data.voteGhostForUid is string &&
+             data.voteGhostForUid.size() <= 128 &&
+             data.updatedAt is timestamp &&
+             data.updatedAt <= request.time;
+    }
+
+    match /users/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && request.auth.uid == userId;
+      allow list: if isSignedIn() && request.auth.uid == userId;
+
+      allow create: if isSignedIn() &&
+                       isValidId(userId) &&
+                       request.auth.uid == userId &&
+                       incoming().userId == request.auth.uid &&
+                       incoming().keys().hasAll(['userId', 'username', 'email', 'level', 'wins', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(allowedUserFields()) &&
+                       isValidUserProfile(incoming());
+
+      allow update: if isSignedIn() &&
+                       isValidId(userId) &&
+                       request.auth.uid == userId &&
+                       isValidUserProfile(incoming()) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'username', 'email', 'level', 'wins', 'updatedAt',
+                         'championCount', 'bestTimeSec', 'bestHighScore', 'spendablePoints',
+                         'playerLevel', 'playerXp', 'totalCatsSaved', 'bestEndlessCats',
+                         'totalGhostsScared', 'totalItemsUsed', 'totalDashesUsed', 'totalSonicsUsed',
+                         'selectedSkinId', 'discoveredItemsCsv', 'unlockedAchievementsCsv',
+                         'purchasedSkinsCsv', 'purchasedModesCsv', 'purchasedItemsCsv',
+                         'tradedAwaySkinsCsv', 'reviveCount', 'saveUpdatedAt'
+                       ]);
+
+      allow delete: if isSignedIn() && isValidId(userId) && request.auth.uid == userId;
+
+      match /friends/{friendId} {
+        allow get, list: if isSignedIn() && isValidId(userId) && request.auth.uid == userId;
+
+        allow create, update: if isSignedIn() &&
+                                 isValidId(userId) &&
+                                 isValidId(friendId) &&
+                                 request.auth.uid == userId &&
+                                 friendId != userId &&
+                                 incoming().friendUserId == friendId &&
+                                 incoming().friendUsername is string &&
+                                 incoming().friendUsername.size() >= 1 &&
+                                 incoming().friendUsername.size() <= 24 &&
+                                 incoming().friendLevel is int &&
+                                 incoming().friendLevel >= 1 &&
+                                 incoming().friendLevel <= 9999 &&
+                                 incoming().friendWins is int &&
+                                 incoming().friendWins >= 0 &&
+                                 incoming().friendWins <= 999999 &&
+                                 incoming().friendSkinId is string &&
+                                 incoming().friendSkinId.size() <= 64 &&
+                                 incoming().createdAt is timestamp &&
+                                 incoming().createdAt <= request.time &&
+                                 incoming().keys().hasAll(['friendUserId', 'friendUsername', 'friendLevel', 'friendWins', 'friendSkinId', 'createdAt']) &&
+                                 incoming().keys().hasOnly(['friendUserId', 'friendUsername', 'friendLevel', 'friendWins', 'friendSkinId', 'createdAt']);
+
+        allow delete: if isSignedIn() && isValidId(userId) && isValidId(friendId) && request.auth.uid == userId;
+      }
+    }
+
+    match /playerDirectory/{userId} {
+      allow get, list: if isSignedIn();
+
+      allow create, update: if isSignedIn() &&
+                               isValidId(userId) &&
+                               request.auth.uid == userId &&
+                               incoming().userId == userId &&
+                               incoming().username is string &&
+                               incoming().username.size() >= 3 &&
+                               incoming().username.size() <= 24 &&
+                               incoming().usernameLower is string &&
+                               incoming().usernameLower.size() >= 3 &&
+                               incoming().usernameLower.size() <= 24 &&
+                               incoming().level is int &&
+                               incoming().level >= 1 &&
+                               incoming().level <= 9999 &&
+                               incoming().wins is int &&
+                               incoming().wins >= 0 &&
+                               incoming().wins <= 999999 &&
+                               incoming().selectedSkinId is string &&
+                               incoming().selectedSkinId.size() <= 64 &&
+                               incoming().updatedAt is timestamp &&
+                               incoming().updatedAt <= request.time &&
+                               incoming().keys().hasAll(['userId', 'username', 'usernameLower', 'level', 'wins', 'selectedSkinId', 'updatedAt']) &&
+                               incoming().keys().hasOnly(['userId', 'username', 'usernameLower', 'level', 'wins', 'selectedSkinId', 'updatedAt']);
+
+      allow delete: if isSignedIn() && isValidId(userId) && request.auth.uid == userId;
+    }
+
+    match /sharedSkins/{shareId} {
+      allow get, list: if isSignedIn();
+
+      allow create: if isSignedIn() &&
+                       isValidId(shareId) &&
+                       incoming().shareId == shareId &&
+                       incoming().ownerUserId == request.auth.uid &&
+                       incoming().ownerUsername is string &&
+                       incoming().ownerUsername.size() >= 1 &&
+                       incoming().ownerUsername.size() <= 24 &&
+                       incoming().skinId is string &&
+                       incoming().skinId.size() >= 1 &&
+                       incoming().skinId.size() <= 64 &&
+                       incoming().skinName is string &&
+                       incoming().skinName.size() >= 1 &&
+                       incoming().skinName.size() <= 64 &&
+                       incoming().badgeEmoji is string &&
+                       incoming().badgeEmoji.size() >= 1 &&
+                       incoming().badgeEmoji.size() <= 16 &&
+                       incoming().customNote is string &&
+                       incoming().customNote.size() <= 120 &&
+                       incoming().recipientUsername is string &&
+                       incoming().recipientUsername.size() <= 24 &&
+                       incoming().likes == 0 &&
+                       incoming().createdAt is timestamp &&
+                       incoming().createdAt <= request.time &&
+                       incoming().keys().hasAll(['shareId', 'ownerUserId', 'ownerUsername', 'skinId', 'skinName', 'badgeEmoji', 'customNote', 'recipientUsername', 'likes', 'createdAt']) &&
+                       incoming().keys().hasOnly(['shareId', 'ownerUserId', 'ownerUsername', 'skinId', 'skinName', 'badgeEmoji', 'customNote', 'recipientUsername', 'likes', 'createdAt']);
+
+      allow update: if isSignedIn() &&
+                       isValidId(shareId) &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['likes']) &&
+                       incoming().likes is int &&
+                       incoming().likes == existing().likes + 1;
+
+      allow delete: if isSignedIn() && isValidId(shareId) && existing().ownerUserId == request.auth.uid;
+    }
+
+    match /rooms/{roomId} {
+      allow get: if isSignedIn() &&
+                    isValidId(roomId) &&
+                    (resource == null ||
+                     resource.data.hostUserId == request.auth.uid ||
+                     resource.data.guestUserId == request.auth.uid ||
+                     resource.data.status in ['waiting', 'playing']);
+
+      allow list: if isSignedIn() &&
+                     ((resource.data.isPublic == true && resource.data.status in ['waiting', 'playing']) ||
+                      resource.data.hostUserId == request.auth.uid);
+
+      allow create: if isSignedIn() &&
+                       isValidId(roomId) &&
+                       incoming().code == roomId &&
+                       incoming().hostUserId == request.auth.uid &&
+                       incoming().guestUserId == '' &&
+                       incoming().guestUsername == '' &&
+                       incoming().ghostPlayerUserId == '' &&
+                       incoming().status == 'waiting' &&
+                       incoming().playerCount == 1 &&
+                       incoming().winnerUserId == '' &&
+                       incoming().winnerUsername == '' &&
+                       incoming().hostScore == 0 &&
+                       incoming().guestScore == 0 &&
+                       incoming().keys().hasAll([
+                         'code', 'isPublic', 'status', 'difficulty', 'maxPlayers', 'playerCount',
+                         'ghostPlayerUserId', 'hostUserId', 'hostUsername',
+                         'guestUserId', 'guestUsername', 'hostX', 'hostY', 'hostScore',
+                         'guestX', 'guestY', 'guestScore', 'targetCats', 'winnerUserId',
+                         'winnerUsername', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'code', 'isPublic', 'status', 'difficulty', 'maxPlayers', 'playerCount',
+                         'ghostPlayerUserId', 'hostUserId', 'hostUsername',
+                         'guestUserId', 'guestUsername', 'hostX', 'hostY', 'hostScore',
+                         'guestX', 'guestY', 'guestScore', 'targetCats', 'winnerUserId',
+                         'winnerUsername', 'createdAt', 'updatedAt'
+                       ]) &&
+                       isValidRoom(incoming());
+
+      allow update: if isSignedIn() &&
+                       isValidId(roomId) &&
+                       isValidRoom(incoming()) &&
+                       existing().status != 'finished' &&
+                       incoming().code == existing().code &&
+                       incoming().hostUserId == existing().hostUserId &&
+                       incoming().hostUsername == existing().hostUsername &&
+                       incoming().isPublic == existing().isPublic &&
+                       incoming().difficulty == existing().difficulty &&
+                       incoming().maxPlayers == existing().maxPlayers &&
+                       incoming().targetCats == existing().targetCats &&
+                       incoming().createdAt == existing().createdAt &&
+                       (
+                         // Any joining player updates room occupancy / status while capacity permits
+                         (existing().playerCount < existing().maxPlayers &&
+                          incoming().playerCount <= existing().maxPlayers &&
+                          incoming().status in ['waiting', 'playing'] &&
+                          incoming().winnerUserId == '' &&
+                          incoming().diff(existing()).affectedKeys().hasOnly(['guestUserId', 'guestUsername', 'playerCount', 'status', 'updatedAt'])) ||
+                         // Leaving or participant updating state, vote tally ghostPlayerUserId, or finishing match
+                         ((request.auth.uid == existing().hostUserId ||
+                           request.auth.uid == existing().guestUserId ||
+                           exists(/databases/$(database)/documents/rooms/$(roomId)/players/$(request.auth.uid))) &&
+                          (incoming().status == existing().status ||
+                           (existing().status == 'playing' &&
+                            incoming().status == 'finished' &&
+                            incoming().winnerUserId != '') ||
+                           (existing().status == 'playing' &&
+                            incoming().status == 'waiting' &&
+                            incoming().winnerUserId == '')) &&
+                          incoming().diff(existing()).affectedKeys().hasOnly([
+                            'hostX', 'hostY', 'hostScore', 'guestUserId', 'guestUsername',
+                            'guestX', 'guestY', 'guestScore', 'playerCount', 'ghostPlayerUserId',
+                            'status', 'winnerUserId', 'winnerUsername', 'updatedAt'
+                          ]))
+                       );
+
+      allow delete: if isSignedIn() && isValidId(roomId) && existing().hostUserId == request.auth.uid;
+
+      match /players/{playerId} {
+        allow get, list: if isSignedIn() && isValidId(roomId);
+
+        allow create, update: if isSignedIn() &&
+                                 isValidId(roomId) &&
+                                 isValidId(playerId) &&
+                                 request.auth.uid == playerId &&
+                                 incoming().userId == playerId &&
+                                 incoming().keys().hasAll(['userId', 'username', 'x', 'y', 'score', 'role', 'skinId', 'voteGhostForUid', 'updatedAt']) &&
+                                 incoming().keys().hasOnly(['userId', 'username', 'x', 'y', 'score', 'role', 'skinId', 'voteGhostForUid', 'updatedAt']) &&
+                                 isValidRoomPlayer(incoming());
+
+        allow delete: if isSignedIn() &&
+                         isValidId(roomId) &&
+                         isValidId(playerId) &&
+                         (request.auth.uid == playerId ||
+                          get(/databases/$(database)/documents/rooms/$(roomId)).data.hostUserId == request.auth.uid);
+      }
+    }
+
+    match /appConfig/{docId} {
+      allow get: if isSignedIn() && isValidId(docId);
+    }
+  }
+}

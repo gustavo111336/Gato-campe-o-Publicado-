@@ -1,0 +1,182 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Authenticated player profile with username, private email, online stats, and full cloud save progress.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Firebase Auth UID of the account owner." },
+        "username": { "type": "string", "description": "Public player handle displayed in multiplayer rooms." },
+        "email": { "type": "string", "description": "Verified account email address (private PII)." },
+        "level": { "type": "integer", "description": "Player progression level." },
+        "wins": { "type": "integer", "description": "Total fair wins." },
+        "championCount": { "type": "integer", "description": "Total champion wins saved in cloud." },
+        "bestTimeSec": { "type": "number", "description": "Best classic 10-cat completion time in seconds." },
+        "bestHighScore": { "type": "integer", "description": "Highest scoreboard record." },
+        "spendablePoints": { "type": "integer", "description": "Spendable points currency for the Shop." },
+        "playerLevel": { "type": "integer", "description": "Career level." },
+        "playerXp": { "type": "integer", "description": "Career XP within current level." },
+        "totalCatsSaved": { "type": "integer", "description": "Cumulative cats rescued." },
+        "bestEndlessCats": { "type": "integer", "description": "Best endless mode cat rescue record." },
+        "totalGhostsScared": { "type": "integer", "description": "Cumulative ghosts scared." },
+        "totalItemsUsed": { "type": "integer", "description": "Cumulative items collected." },
+        "totalDashesUsed": { "type": "integer", "description": "Cumulative Turbo dashes." },
+        "totalSonicsUsed": { "type": "integer", "description": "Cumulative Sonic waves." },
+        "selectedSkinId": { "type": "string", "description": "Equipped hero skin ID." },
+        "discoveredItemsCsv": { "type": "string", "description": "Comma-separated discovered item IDs." },
+        "unlockedAchievementsCsv": { "type": "string", "description": "Comma-separated unlocked achievement IDs." },
+        "purchasedSkinsCsv": { "type": "string", "description": "Comma-separated shop-purchased or gifted skin IDs." },
+        "purchasedModesCsv": { "type": "string", "description": "Comma-separated shop-purchased mode IDs." },
+        "purchasedItemsCsv": { "type": "string", "description": "Comma-separated shop-purchased item IDs." },
+        "tradedAwaySkinsCsv": { "type": "string", "description": "Comma-separated skin IDs traded in the shop." },
+        "reviveCount": { "type": "integer", "description": "Number of Revives owned by the player." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp on creation." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp on update." },
+        "saveUpdatedAt": { "type": "string", "format": "date-time", "description": "Timestamp of last full cloud save." }
+      },
+      "required": ["userId", "username", "email", "level", "wins", "createdAt", "updatedAt"]
+    },
+    "PlayerDirectoryEntry": {
+      "title": "PlayerDirectoryEntry",
+      "description": "Public non-PII searchable player entry used for friend search.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "username": { "type": "string" },
+        "usernameLower": { "type": "string" },
+        "level": { "type": "integer" },
+        "wins": { "type": "integer" },
+        "selectedSkinId": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "username", "usernameLower", "level", "wins", "selectedSkinId", "updatedAt"]
+    },
+    "FriendLink": {
+      "title": "FriendLink",
+      "description": "Added friend stored privately under the user's friends subcollection.",
+      "type": "object",
+      "properties": {
+        "friendUserId": { "type": "string" },
+        "friendUsername": { "type": "string" },
+        "friendLevel": { "type": "integer" },
+        "friendWins": { "type": "integer" },
+        "friendSkinId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["friendUserId", "friendUsername", "friendLevel", "friendWins", "friendSkinId", "createdAt"]
+    },
+    "SharedSkinPost": {
+      "title": "SharedSkinPost",
+      "description": "Community/friend shared skin showcase and gift entry.",
+      "type": "object",
+      "properties": {
+        "shareId": { "type": "string" },
+        "ownerUserId": { "type": "string" },
+        "ownerUsername": { "type": "string" },
+        "skinId": { "type": "string" },
+        "skinName": { "type": "string" },
+        "badgeEmoji": { "type": "string" },
+        "customNote": { "type": "string" },
+        "recipientUsername": { "type": "string" },
+        "likes": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["shareId", "ownerUserId", "ownerUsername", "skinId", "skinName", "badgeEmoji", "customNote", "recipientUsername", "likes", "createdAt"]
+    },
+    "MultiplayerRoom": {
+      "title": "MultiplayerRoom",
+      "description": "Real-time 2-to-200 player match room supporting public auto-join, private codes, and Elite Ghost voting.",
+      "type": "object",
+      "properties": {
+        "code": { "type": "string" },
+        "isPublic": { "type": "boolean" },
+        "status": { "type": "string", "enum": ["waiting", "playing", "finished"] },
+        "difficulty": { "type": "string", "enum": ["NORMAL", "CALMO", "DESAFIO", "ELITE"] },
+        "maxPlayers": { "type": "integer" },
+        "playerCount": { "type": "integer" },
+        "ghostPlayerUserId": { "type": "string" },
+        "hostUserId": { "type": "string" },
+        "hostUsername": { "type": "string" },
+        "guestUserId": { "type": "string" },
+        "guestUsername": { "type": "string" },
+        "hostX": { "type": "number" },
+        "hostY": { "type": "number" },
+        "hostScore": { "type": "integer" },
+        "guestX": { "type": "number" },
+        "guestY": { "type": "number" },
+        "guestScore": { "type": "integer" },
+        "targetCats": { "type": "integer" },
+        "winnerUserId": { "type": "string" },
+        "winnerUsername": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "code", "isPublic", "status", "difficulty", "maxPlayers", "playerCount",
+        "ghostPlayerUserId", "hostUserId", "hostUsername", "guestUserId",
+        "guestUsername", "hostX", "hostY", "hostScore", "guestX", "guestY",
+        "guestScore", "targetCats", "winnerUserId", "winnerUsername", "createdAt", "updatedAt"
+      ]
+    },
+    "RoomPlayer": {
+      "title": "RoomPlayer",
+      "description": "Individual player state inside a multiplayer room (supports 2..200 players, Ghost vote, and instant leave deletion).",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "username": { "type": "string" },
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "score": { "type": "integer" },
+        "role": { "type": "string", "enum": ["cat", "ghost"] },
+        "skinId": { "type": "string" },
+        "voteGhostForUid": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "username", "x", "y", "score", "role", "skinId", "voteGhostForUid", "updatedAt"]
+    },
+    "AppReleaseInfo": {
+      "title": "AppReleaseInfo",
+      "description": "Published release version metadata for update checks.",
+      "type": "object",
+      "properties": {
+        "latestVersionCode": { "type": "integer" },
+        "latestVersionName": { "type": "string" },
+        "releaseNotes": { "type": "string" },
+        "storeUrl": { "type": "string" },
+        "forceUpdate": { "type": "boolean" }
+      },
+      "required": ["latestVersionCode", "latestVersionName"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Per-user private account & cloud save document."
+    },
+    "/users/{userId}/friends/{friendId}": {
+      "schema": { "$ref": "#/entities/FriendLink" },
+      "description": "User's private friends list."
+    },
+    "/playerDirectory/{userId}": {
+      "schema": { "$ref": "#/entities/PlayerDirectoryEntry" },
+      "description": "Public searchable player directory (no PII email)."
+    },
+    "/sharedSkins/{shareId}": {
+      "schema": { "$ref": "#/entities/SharedSkinPost" },
+      "description": "Public/friend shared skins showcase."
+    },
+    "/rooms/{roomId}": {
+      "schema": { "$ref": "#/entities/MultiplayerRoom" },
+      "description": "Multiplayer match rooms supporting 2..200 players."
+    },
+    "/rooms/{roomId}/players/{playerId}": {
+      "schema": { "$ref": "#/entities/RoomPlayer" },
+      "description": "Per-player real-time coordinates, score, role, and Ghost vote."
+    },
+    "/appConfig/{docId}": {
+      "schema": { "$ref": "#/entities/AppReleaseInfo" },
+      "description": "Read-only app release metadata for authenticated update checks."
+    }
+  }
+}

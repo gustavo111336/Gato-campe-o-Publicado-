@@ -1,0 +1,6 @@
+{
+  "name": "Gato Campeão",
+  "description": "Resgate 10 gatinhos para se tornar o grande Campeão enquanto foge do fantasma que te persegue!",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
