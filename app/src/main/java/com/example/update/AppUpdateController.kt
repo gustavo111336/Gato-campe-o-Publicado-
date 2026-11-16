@@ -41,20 +41,21 @@ data class AppUpdateUiState(
   val availableVersionName: String? = null,
   val downloadProgressPercent: Int = 0,
   val message: String = "Versão atual: v${BuildConfig.VERSION_NAME} (build ${BuildConfig.VERSION_CODE})",
-  val storeUrl: String = "https://github.com/gustavo111336/Gato-campe-o-Publicado-/releases"
+  val storeUrl: String = "https://github.com/gustavo111336/Gato-campe-o-Publicado-/tree/main/app/apk"
 )
 
 class AppUpdateController(context: Context) {
   private val appContext = context.applicationContext
   private val appUpdateManager: AppUpdateManager = AppUpdateManagerFactory.create(appContext)
   private var launcher: ActivityResultLauncher<IntentSenderRequest>? = null
+  private val prefs = appContext.getSharedPreferences("app_update_prefs", Context.MODE_PRIVATE)
 
-  private val defaultGitHubReleasesUrl = "https://github.com/gustavo111336/Gato-campe-o-Publicado-/releases"
+  private val defaultGitHubFolderUrl = "https://github.com/gustavo111336/Gato-campe-o-Publicado-/tree/main/app/apk"
   private val defaultPlayUrl = "https://play.google.com/store/apps/details?id=${appContext.packageName}"
 
   private val _state = MutableStateFlow(
     AppUpdateUiState(
-      storeUrl = defaultGitHubReleasesUrl
+      storeUrl = defaultGitHubFolderUrl
     )
   )
   val state = _state.asStateFlow()
@@ -95,7 +96,7 @@ class AppUpdateController(context: Context) {
       InstallStatus.FAILED -> {
         _state.value = _state.value.copy(
           status = AppUpdateUiStatus.ERROR,
-          message = "⚠️ Falha ao instalar atualização (código ${installState.installErrorCode()})."
+          message = "⚠️ Falha ao instalar atualização."
         )
       }
       else -> Unit
@@ -130,13 +131,13 @@ class AppUpdateController(context: Context) {
   ) {
     _state.value = _state.value.copy(
       status = AppUpdateUiStatus.CHECKING,
-      message = "🔍 Verificando atualizações no GitHub e Play Store..."
+      message = "🔍 Verificando commits no GitHub..."
     )
 
-    // 1. Check GitHub public repository releases API
+    // Check latest commit SHA on GitHub repository main branch
     Thread {
       try {
-        val apiUrl = URL("https://api.github.com/repos/gustavo111336/Gato-campe-o-Publicado-/releases/latest")
+        val apiUrl = URL("https://api.github.com/repos/gustavo111336/Gato-campe-o-Publicado-/commits/main")
         val conn = (apiUrl.openConnection() as HttpURLConnection).apply {
           requestMethod = "GET"
           setRequestProperty("Accept", "application/vnd.github+json")
@@ -145,28 +146,43 @@ class AppUpdateController(context: Context) {
         }
         if (conn.responseCode == 200) {
           val json = conn.inputStream.bufferedReader().use { it.readText() }
-          val tagName = extractJsonField(json, "tag_name") ?: ""
-          val htmlUrl = extractJsonField(json, "html_url") ?: defaultGitHubReleasesUrl
-          val cleanTag = tagName.removePrefix("v").trim()
-          val cleanCurrent = BuildConfig.VERSION_NAME.trim()
+          val remoteSha = extractJsonField(json, "sha") ?: ""
+          val localSha = prefs.getString("github_last_sha", "") ?: ""
 
-          if (cleanTag.isNotBlank() && cleanTag != cleanCurrent) {
-            _state.value = _state.value.copy(
-              status = AppUpdateUiStatus.UPDATE_AVAILABLE,
-              availableVersionName = cleanTag,
-              storeUrl = htmlUrl,
-              message = "🚀 Nova versão v$cleanTag disponível no GitHub!"
-            )
-            return@Thread
+          if (remoteSha.isNotBlank()) {
+            if (localSha.isBlank()) {
+              prefs.edit().putString("github_last_sha", remoteSha).apply()
+              _state.value = _state.value.copy(
+                status = AppUpdateUiStatus.UP_TO_DATE,
+                storeUrl = defaultGitHubFolderUrl,
+                message = "✅ v${BuildConfig.VERSION_NAME} está atualizado com o GitHub!"
+              )
+              return@Thread
+            } else if (remoteSha != localSha) {
+              prefs.edit().putString("github_last_sha", remoteSha).apply()
+              _state.value = _state.value.copy(
+                status = AppUpdateUiStatus.UPDATE_AVAILABLE,
+                storeUrl = defaultGitHubFolderUrl,
+                message = "🚀 Novo commit no GitHub! Toque para baixar o APK na pasta."
+              )
+              return@Thread
+            } else {
+              _state.value = _state.value.copy(
+                status = AppUpdateUiStatus.UP_TO_DATE,
+                storeUrl = defaultGitHubFolderUrl,
+                message = "✅ v${BuildConfig.VERSION_NAME} está sincronizado com o GitHub!"
+              )
+              return@Thread
+            }
           }
         }
       } catch (e: Exception) {
-        Log.w("AppUpdateController", "GitHub release query error: ${e.message}")
+        Log.w("AppUpdateController", "GitHub commit check error: ${e.message}")
       }
 
-      // 2. Fallback to Firestore remote config if GitHub query didn't find newer version
+      // Fallback to Firestore remote config
       if (remoteRelease != null && remoteRelease.latestVersionCode > BuildConfig.VERSION_CODE) {
-        val resolvedUrl = remoteRelease.storeUrl.ifBlank { defaultGitHubReleasesUrl }
+        val resolvedUrl = remoteRelease.storeUrl.ifBlank { defaultGitHubFolderUrl }
         _state.value = _state.value.copy(
           status = AppUpdateUiStatus.UPDATE_AVAILABLE,
           availableVersionCode = remoteRelease.latestVersionCode.toInt(),
@@ -177,26 +193,12 @@ class AppUpdateController(context: Context) {
         return@Thread
       }
 
-      // 3. Fallback to Play In-App Updates
-      try {
-        appUpdateManager.appUpdateInfo
-          .addOnSuccessListener { info ->
-            handlePlayUpdateInfo(info, autoTrigger)
-          }
-          .addOnFailureListener {
-            _state.value = _state.value.copy(
-              status = AppUpdateUiStatus.UP_TO_DATE,
-              storeUrl = defaultGitHubReleasesUrl,
-              message = "✅ v${BuildConfig.VERSION_NAME} (GitHub Público) está atualizado!"
-            )
-          }
-      } catch (_: Exception) {
-        _state.value = _state.value.copy(
-          status = AppUpdateUiStatus.UP_TO_DATE,
-          storeUrl = defaultGitHubReleasesUrl,
-          message = "✅ Versão instalada: v${BuildConfig.VERSION_NAME}."
-        )
-      }
+      // Fallback status
+      _state.value = _state.value.copy(
+        status = AppUpdateUiStatus.UP_TO_DATE,
+        storeUrl = defaultGitHubFolderUrl,
+        message = "✅ v${BuildConfig.VERSION_NAME} (Repositório GitHub) atualizado!"
+      )
     }.start()
   }
 
@@ -212,63 +214,12 @@ class AppUpdateController(context: Context) {
           _state.value = _state.value.copy(
             status = AppUpdateUiStatus.DOWNLOADED,
             downloadProgressPercent = 100,
-            message = "✅ Atualização pronta! Instalando..."
+            message = "✅ Atualização baixada! Instalando..."
           )
           completeFlexibleUpdate()
-        } else if (info.updateAvailability() == UpdateAvailability.DEVELOPER_TRIGGERED_UPDATE_IN_PROGRESS) {
-          startUpdateFlow(info, AppUpdateType.IMMEDIATE)
         }
       }
     } catch (_: Exception) {
-    }
-  }
-
-  private fun handlePlayUpdateInfo(info: AppUpdateInfo, autoTrigger: Boolean) {
-    when {
-      info.installStatus() == InstallStatus.DOWNLOADED -> {
-        _state.value = _state.value.copy(
-          status = AppUpdateUiStatus.DOWNLOADED,
-          downloadProgressPercent = 100,
-          message = "✅ Atualização baixada! Instalando..."
-        )
-        completeFlexibleUpdate()
-      }
-      info.updateAvailability() == UpdateAvailability.UPDATE_AVAILABLE -> {
-        val availCode = info.availableVersionCode()
-        val chosenType = when {
-          info.isUpdateTypeAllowed(AppUpdateType.IMMEDIATE) -> AppUpdateType.IMMEDIATE
-          info.isUpdateTypeAllowed(AppUpdateType.FLEXIBLE) -> AppUpdateType.FLEXIBLE
-          else -> null
-        }
-        _state.value = _state.value.copy(
-          status = AppUpdateUiStatus.UPDATE_AVAILABLE,
-          availableVersionCode = availCode,
-          message = "🚀 Nova versão (build $availCode) disponível na Google Play!"
-        )
-        if (autoTrigger && chosenType != null) {
-          startUpdateFlow(info, chosenType)
-        }
-      }
-      else -> {
-        if (_state.value.status != AppUpdateUiStatus.UPDATE_AVAILABLE) {
-          _state.value = _state.value.copy(
-            status = AppUpdateUiStatus.UP_TO_DATE,
-            availableVersionCode = BuildConfig.VERSION_CODE,
-            availableVersionName = BuildConfig.VERSION_NAME,
-            message = "✅ App atualizado (v${BuildConfig.VERSION_NAME})."
-          )
-        }
-      }
-    }
-  }
-
-  private fun startUpdateFlow(info: AppUpdateInfo, updateType: Int) {
-    val activeLauncher = launcher ?: return
-    try {
-      val options = AppUpdateOptions.newBuilder(updateType).build()
-      appUpdateManager.startUpdateFlowForResult(info, activeLauncher, options)
-    } catch (e: Exception) {
-      Log.e("AppUpdateController", "startUpdateFlowForResult failed: ${e.message}")
     }
   }
 
@@ -281,14 +232,14 @@ class AppUpdateController(context: Context) {
   }
 
   fun openStoreForUpdate(context: Context) {
-    val targetWebUrl = _state.value.storeUrl.ifBlank { defaultGitHubReleasesUrl }
+    val targetWebUrl = _state.value.storeUrl.ifBlank { defaultGitHubFolderUrl }
     val intent = Intent(Intent.ACTION_VIEW, Uri.parse(targetWebUrl)).apply {
       addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     }
     try {
       context.startActivity(intent)
     } catch (e: Exception) {
-      Log.e("AppUpdateController", "Failed to open GitHub releases URL: ${e.message}")
+      Log.e("AppUpdateController", "Failed to open GitHub folder URL: ${e.message}")
     }
   }
 
