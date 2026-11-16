@@ -1,5 +1,6 @@
 package com.example.ui
 
+import android.content.Intent
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
@@ -38,7 +39,8 @@ private enum class OnlineLobbyTab(val label: String) {
   ROOMS("🌐 Salas"),
   CLOUD_SAVE("☁️ Conta"),
   FRIENDS("🤝 Amigos"),
-  SHARED_SKINS("🎨 Skins")
+  SHARED_SKINS("🎨 Skins"),
+  VIDEOS("📺 Vídeos & Feed")
 }
 
 @Composable
@@ -434,6 +436,15 @@ private fun AuthenticatedMultiplayerLobby(
         sharedSkinsState = sharedSkinsState,
         isBusy = isBusy,
         onClaimSharedSkin = onClaimSharedSkin
+      )
+    }
+
+    OnlineLobbyTab.VIDEOS -> {
+      VideoFeedSection(
+        currentUser = user,
+        onlineVm = onlineVm,
+        profile = loadedProfile,
+        uiState = uiState
       )
     }
   }
@@ -1384,6 +1395,311 @@ private fun SharedSkinsTabContent(
                       .defaultMinSize(minHeight = 48.dp)
                   ) {
                     Text("🎨 Pegar & Usar Skin", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+@Composable
+private fun VideoFeedSection(
+  currentUser: FirebaseUser,
+  onlineVm: OnlineMultiplayerViewModel,
+  profile: UserProfile?,
+  uiState: GameUiState
+) {
+  val context = LocalContext.current
+  val gameplayVideosState by onlineVm.gameplayVideosState.collectAsStateWithLifecycle()
+  var showPostDialog by remember { mutableStateOf(false) }
+  var postTitleInput by remember { mutableStateOf("") }
+  var activeCommentPostId by remember { mutableStateOf<String?>(null) }
+  var commentInput by remember { mutableStateOf("") }
+
+  val blockedSet = remember(profile?.blockedUserIdsCsv) {
+    profile?.blockedUserIdsCsv?.split(",")?.map { it.trim() }?.filter { it.isNotBlank() }?.toSet() ?: emptySet()
+  }
+
+  Column(modifier = Modifier.fillMaxWidth()) {
+    Row(
+      modifier = Modifier.fillMaxWidth(),
+      horizontalArrangement = Arrangement.SpaceBetween,
+      verticalAlignment = Alignment.CenterVertically
+    ) {
+      Text(
+        text = "📺 Feed de Vídeos & Replays da Comunidade",
+        fontSize = 13.sp,
+        fontWeight = FontWeight.Bold,
+        color = Color(0xFFFDE047)
+      )
+      Button(
+        onClick = { showPostDialog = true },
+        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B5CF6)),
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.defaultMinSize(minHeight = 48.dp)
+      ) {
+        Text("🎥 Postar Replay", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+      }
+    }
+
+    Spacer(modifier = Modifier.height(8.dp))
+
+    if (showPostDialog) {
+      Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = Color(0xFF1E293B),
+        border = BorderStroke(1.5.dp, Color(0xFF8B5CF6)),
+        modifier = Modifier.fillMaxWidth()
+      ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+          Text("🎥 Compartilhar Sua Partida Recente", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFFC4B5FD))
+          Spacer(modifier = Modifier.height(6.dp))
+          OutlinedTextField(
+            value = postTitleInput,
+            onValueChange = { postTitleInput = it.take(120) },
+            label = { Text("Título da Gameplay / Descrição", fontSize = 11.sp) },
+            singleLine = true,
+            colors = OutlinedTextFieldDefaults.colors(
+              focusedTextColor = Color.White,
+              unfocusedTextColor = Color.White,
+              focusedBorderColor = Color(0xFF8B5CF6),
+              unfocusedBorderColor = Color(0xFF475569)
+            ),
+            modifier = Modifier.fillMaxWidth()
+          )
+          Spacer(modifier = Modifier.height(6.dp))
+          Text(
+            text = "Estatísticas a postar: 🏆 ${uiState.currentScore} pts • 🎮 ${uiState.currentMode.name} • ⏱️ ${(uiState.gameTimeSeconds).toInt()}s",
+            fontSize = 11.sp,
+            color = Color(0xFF94A3B8)
+          )
+          Spacer(modifier = Modifier.height(8.dp))
+          Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(
+              onClick = { showPostDialog = false },
+              modifier = Modifier.weight(1f).defaultMinSize(minHeight = 48.dp)
+            ) {
+              Text("Cancelar", fontSize = 11.sp, color = Color.White)
+            }
+            Button(
+              onClick = {
+                val title = postTitleInput.ifBlank { "Minha jogada épica em ${uiState.currentMode.name}!" }
+                onlineVm.postGameplayVideo(
+                  title = title,
+                  score = uiState.currentScore.toLong(),
+                  modeName = uiState.currentMode.name,
+                  durationSec = uiState.gameTimeSeconds,
+                  skinId = uiState.selectedSkinId,
+                  username = profile?.username ?: "GatoGamer"
+                )
+                postTitleInput = ""
+                showPostDialog = false
+              },
+              colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7C3AED)),
+              modifier = Modifier.weight(1f).defaultMinSize(minHeight = 48.dp)
+            ) {
+              Text("Publicar", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+            }
+          }
+        }
+      }
+      Spacer(modifier = Modifier.height(10.dp))
+    }
+
+    when (gameplayVideosState) {
+      is OnlineLoadState.Loading -> {
+        Text("Carregando feed de vídeos...", fontSize = 11.sp, color = Color(0xFF94A3B8))
+      }
+      is OnlineLoadState.Error -> {
+        Text("⚠️ ${(gameplayVideosState as OnlineLoadState.Error).message}", fontSize = 11.sp, color = Color(0xFFF87171))
+      }
+      is OnlineLoadState.Success -> {
+        val posts = (gameplayVideosState as OnlineLoadState.Success).data.filter { it.userId !in blockedSet }
+        if (posts.isEmpty()) {
+          Text("Nenhum vídeo no feed ainda. Seja o primeiro a publicar sua gameplay!", fontSize = 11.sp, color = Color(0xFF94A3B8))
+        } else {
+          Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            posts.forEach { post ->
+              val isLiked = post.likedByUserIds.contains(currentUser.uid)
+              val skinDef = ALL_HERO_SKINS.find { it.id == post.userSkinId } ?: ALL_HERO_SKINS.first()
+
+              Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = Color(0xFF1E293B),
+                border = BorderStroke(1.dp, Color(0xFF334155)),
+                modifier = Modifier.fillMaxWidth()
+              ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                  Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                  ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                      Text(skinDef.badgeEmoji, fontSize = 20.sp)
+                      Spacer(modifier = Modifier.width(8.dp))
+                      Column {
+                        Text(
+                          text = "@${post.username}",
+                          fontSize = 12.sp,
+                          fontWeight = FontWeight.Bold,
+                          color = Color(0xFF38BDF8)
+                        )
+                        Text(
+                          text = "🎮 ${post.modeName}",
+                          fontSize = 10.sp,
+                          color = Color(0xFF94A3B8)
+                        )
+                      }
+                    }
+                    if (post.userId != currentUser.uid) {
+                      TextButton(
+                        onClick = {
+                          val currentBlocked = profile?.blockedUserIdsCsv.orEmpty()
+                          onlineVm.blockUser(post.userId, currentBlocked)
+                        },
+                        modifier = Modifier.defaultMinSize(minHeight = 36.dp)
+                      ) {
+                        Text("🚫 Bloquear", fontSize = 10.sp, color = Color(0xFFF87171))
+                      }
+                    }
+                  }
+
+                  Spacer(modifier = Modifier.height(6.dp))
+                  Text(
+                    text = post.title,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                  )
+
+                  Spacer(modifier = Modifier.height(4.dp))
+                  Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("🏆 ${post.score} pts", fontSize = 11.sp, color = Color(0xFF34D399), fontWeight = FontWeight.Bold)
+                    Text("⏱️ ${post.durationSec.toInt()}s", fontSize = 11.sp, color = Color(0xFFCBD5E1))
+                  }
+
+                  Spacer(modifier = Modifier.height(8.dp))
+                  Divider(color = Color(0xFF334155), thickness = 1.dp)
+                  Spacer(modifier = Modifier.height(8.dp))
+
+                  Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                  ) {
+                    OutlinedButton(
+                      onClick = { onlineVm.likeVideo(post.postId, post.likes, post.likedByUserIds) },
+                      colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = if (isLiked) Color(0xFF831843) else Color.Transparent
+                      ),
+                      border = BorderStroke(1.dp, if (isLiked) Color(0xFFF472B6) else Color(0xFF475569)),
+                      modifier = Modifier.defaultMinSize(minHeight = 44.dp)
+                    ) {
+                      Text(
+                        text = "${if (isLiked) "❤️" else "🤍"} ${post.likes}",
+                        fontSize = 11.sp,
+                        color = if (isLiked) Color(0xFFF9A8D4) else Color.White
+                      )
+                    }
+
+                    OutlinedButton(
+                      onClick = {
+                        activeCommentPostId = if (activeCommentPostId == post.postId) null else post.postId
+                      },
+                      modifier = Modifier.defaultMinSize(minHeight = 44.dp)
+                    ) {
+                      Text("💬 ${post.commentsCount} Comentários", fontSize = 11.sp, color = Color(0xFF38BDF8))
+                    }
+
+                    OutlinedButton(
+                      onClick = {
+                        val sendIntent = Intent().apply {
+                          action = Intent.ACTION_SEND
+                          putExtra(Intent.EXTRA_TEXT, "🎬 Gameplay de @${post.username} no Gato Campeão!\nTítulo: \"${post.title}\"\nPontuação: ${post.score} pts (${post.modeName})")
+                          type = "text/plain"
+                        }
+                        val shareIntent = Intent.createChooser(sendIntent, "Compartilhar Gameplay")
+                        shareIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        context.startActivity(shareIntent)
+                      },
+                      modifier = Modifier.defaultMinSize(minHeight = 44.dp)
+                    ) {
+                      Text("📤 Compartilhar", fontSize = 11.sp, color = Color(0xFFFDE047))
+                    }
+                  }
+
+                  if (activeCommentPostId == post.postId) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Surface(
+                      shape = RoundedCornerShape(12.dp),
+                      color = Color(0xFF0F172A),
+                      border = BorderStroke(1.dp, Color(0xFF334155)),
+                      modifier = Modifier.fillMaxWidth()
+                    ) {
+                      Column(modifier = Modifier.padding(10.dp)) {
+                        Text("💬 Comentários", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF38BDF8))
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        val commentsState = onlineVm.observeCommentsForPost(post.postId).collectAsStateWithLifecycle(initialValue = emptyList())
+                        if (commentsState.value.isEmpty()) {
+                          Text("Nenhum comentário ainda. Seja o primeiro!", fontSize = 10.sp, color = Color(0xFF94A3B8))
+                        } else {
+                          Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            commentsState.value.forEach { comment ->
+                              Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                              ) {
+                                Text(
+                                  text = "@${comment.username}: ${comment.text}",
+                                  fontSize = 11.sp,
+                                  color = Color.White,
+                                  modifier = Modifier.weight(1f)
+                                )
+                              }
+                            }
+                          }
+                        }
+
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(
+                          modifier = Modifier.fillMaxWidth(),
+                          horizontalArrangement = Arrangement.spacedBy(6.dp),
+                          verticalAlignment = Alignment.CenterVertically
+                        ) {
+                          OutlinedTextField(
+                            value = commentInput,
+                            onValueChange = { commentInput = it.take(280) },
+                            label = { Text("Escreva um comentário...", fontSize = 10.sp) },
+                            singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                              focusedTextColor = Color.White,
+                              unfocusedTextColor = Color.White,
+                              focusedBorderColor = Color(0xFF38BDF8),
+                              unfocusedBorderColor = Color(0xFF475569)
+                            ),
+                            modifier = Modifier.weight(1f)
+                          )
+                          Button(
+                            onClick = {
+                              if (commentInput.isNotBlank()) {
+                                onlineVm.commentVideo(post.postId, commentInput, profile?.username ?: "GatoGamer")
+                                commentInput = ""
+                              }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7)),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.height(46.dp)
+                          ) {
+                            Text("Enviar", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                          }
+                        }
+                      }
+                    }
                   }
                 }
               }

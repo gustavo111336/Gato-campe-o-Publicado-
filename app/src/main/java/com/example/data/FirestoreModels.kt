@@ -31,7 +31,8 @@ data class CloudSavePayload(
   val purchasedModesCsv: String = "",
   val purchasedItemsCsv: String = "",
   val tradedAwaySkinsCsv: String = "",
-  val reviveCount: Int = 0
+  val reviveCount: Int = 0,
+  val blockedUserIdsCsv: String = ""
 )
 
 @IgnoreExtraProperties
@@ -62,6 +63,7 @@ data class UserProfile(
   val purchasedItemsCsv: String = "",
   val tradedAwaySkinsCsv: String = "",
   val reviveCount: Long = 0L,
+  val blockedUserIdsCsv: String = "",
   @ServerTimestamp val createdAt: Timestamp? = null,
   @ServerTimestamp val updatedAt: Timestamp? = null,
   @ServerTimestamp val saveUpdatedAt: Timestamp? = null
@@ -112,6 +114,33 @@ data class SharedSkinPost(
   val customNote: String = "",
   val recipientUsername: String = "",
   val likes: Long = 0L,
+  @ServerTimestamp val createdAt: Timestamp? = null
+)
+
+@IgnoreExtraProperties
+data class GameplayVideoPost(
+  @DocumentId val id: String = "",
+  val postId: String = "",
+  val userId: String = "",
+  val username: String = "",
+  val userSkinId: String = "classic_orange",
+  val title: String = "",
+  val score: Long = 0L,
+  val modeName: String = "",
+  val durationSec: Float = 0f,
+  val likes: Long = 0L,
+  val likedByUserIds: List<String> = emptyList(),
+  val commentsCount: Long = 0L,
+  @ServerTimestamp val createdAt: Timestamp? = null
+)
+
+@IgnoreExtraProperties
+data class VideoComment(
+  @DocumentId val id: String = "",
+  val commentId: String = "",
+  val userId: String = "",
+  val username: String = "",
+  val text: String = "",
   @ServerTimestamp val createdAt: Timestamp? = null
 )
 

@@ -29,7 +29,7 @@ service cloud.firestore {
         'totalGhostsScared', 'totalItemsUsed', 'totalDashesUsed', 'totalSonicsUsed',
         'selectedSkinId', 'discoveredItemsCsv', 'unlockedAchievementsCsv',
         'purchasedSkinsCsv', 'purchasedModesCsv', 'purchasedItemsCsv',
-        'tradedAwaySkinsCsv', 'reviveCount', 'saveUpdatedAt'
+        'tradedAwaySkinsCsv', 'reviveCount', 'blockedUserIdsCsv', 'saveUpdatedAt'
       ];
     }
 
@@ -76,6 +76,7 @@ service cloud.firestore {
              (!('purchasedItemsCsv' in data) || isValidCsvField(data.purchasedItemsCsv)) &&
              (!('tradedAwaySkinsCsv' in data) || isValidCsvField(data.tradedAwaySkinsCsv)) &&
              (!('reviveCount' in data) || (data.reviveCount is int && data.reviveCount >= 0 && data.reviveCount <= 9999)) &&
+             (!('blockedUserIdsCsv' in data) || isValidCsvField(data.blockedUserIdsCsv)) &&
              (!('saveUpdatedAt' in data) || (data.saveUpdatedAt is timestamp && data.saveUpdatedAt <= request.time));
     }
 
@@ -388,6 +389,54 @@ service cloud.firestore {
 
     match /appConfig/{docId} {
       allow get: if isSignedIn() && isValidId(docId);
+    }
+
+    match /gameplayVideos/{postId} {
+      allow get, list: if isSignedIn();
+
+      allow create: if isSignedIn() &&
+                       isValidId(postId) &&
+                       incoming().postId == postId &&
+                       incoming().userId == request.auth.uid &&
+                       incoming().username is string &&
+                       incoming().username.size() >= 1 &&
+                       incoming().username.size() <= 24 &&
+                       incoming().title is string &&
+                       incoming().title.size() <= 120 &&
+                       incoming().score is int &&
+                       incoming().score >= 0 &&
+                       incoming().likes == 0 &&
+                       incoming().commentsCount == 0 &&
+                       incoming().createdAt is timestamp &&
+                       incoming().createdAt <= request.time;
+
+      allow update: if isSignedIn() &&
+                       isValidId(postId) &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['likes', 'likedByUserIds', 'commentsCount']);
+
+      allow delete: if isSignedIn() && isValidId(postId) && resource.data.userId == request.auth.uid;
+
+      match /comments/{commentId} {
+        allow get, list: if isSignedIn() && isValidId(postId);
+
+        allow create: if isSignedIn() &&
+                         isValidId(commentId) &&
+                         incoming().commentId == commentId &&
+                         incoming().userId == request.auth.uid &&
+                         incoming().username is string &&
+                         incoming().username.size() >= 1 &&
+                         incoming().username.size() <= 24 &&
+                         incoming().text is string &&
+                         incoming().text.size() >= 1 &&
+                         incoming().text.size() <= 280 &&
+                         incoming().createdAt is timestamp &&
+                         incoming().createdAt <= request.time;
+
+        allow delete: if isSignedIn() &&
+                         isValidId(commentId) &&
+                         (resource.data.userId == request.auth.uid ||
+                          get(/databases/$(database)/documents/gameplayVideos/$(postId)).data.userId == request.auth.uid);
+      }
     }
   }
 }

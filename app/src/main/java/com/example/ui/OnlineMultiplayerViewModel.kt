@@ -126,6 +126,23 @@ class OnlineMultiplayerViewModel(
         initialValue = OnlineLoadState.Loading
       )
 
+  val gameplayVideosState: StateFlow<OnlineLoadState<List<com.example.data.GameplayVideoPost>>> =
+    repository.observeGameplayVideos()
+      .map<List<com.example.data.GameplayVideoPost>, OnlineLoadState<List<com.example.data.GameplayVideoPost>>> { OnlineLoadState.Success(it) }
+      .catch { error ->
+        val firestoreError = generateSequence(error) { it.cause }
+          .filterIsInstance<FirebaseFirestoreException>()
+          .firstOrNull()
+        if (firestoreError == null && error is CancellationException) throw error
+        val rootError = firestoreError ?: error
+        emit(OnlineLoadState.Error(rootError.message ?: "Erro ao carregar vídeos."))
+      }
+      .stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000L),
+        initialValue = OnlineLoadState.Loading
+      )
+
   private val _activeRoom = MutableStateFlow<MultiplayerRoom?>(null)
   val activeRoom: StateFlow<MultiplayerRoom?> = _activeRoom.asStateFlow()
 
@@ -174,6 +191,61 @@ class OnlineMultiplayerViewModel(
   fun consumeLeftPlayerAlert() {
     _leftPlayerAlert.value = null
   }
+
+  fun blockUser(targetUserId: String, currentBlockedCsv: String) {
+    viewModelScope.launch {
+      repository.blockUser(currentUserId, targetUserId, currentBlockedCsv).fold(
+        onSuccess = { _statusMessage.value = "🚫 Usuário bloqueado." },
+        onFailure = { _errorMessage.value = "Erro ao bloquear: ${it.message}" }
+      )
+    }
+  }
+
+  fun unblockUser(targetUserId: String, currentBlockedCsv: String) {
+    viewModelScope.launch {
+      repository.unblockUser(currentUserId, targetUserId, currentBlockedCsv).fold(
+        onSuccess = { _statusMessage.value = "✅ Usuário desbloqueado." },
+        onFailure = { _errorMessage.value = "Erro ao desbloquear: ${it.message}" }
+      )
+    }
+  }
+
+  fun postGameplayVideo(title: String, score: Long, modeName: String, durationSec: Float, skinId: String, username: String) {
+    viewModelScope.launch {
+      val post = com.example.data.GameplayVideoPost(
+        userId = currentUserId,
+        username = username,
+        userSkinId = skinId,
+        title = title,
+        score = score,
+        modeName = modeName,
+        durationSec = durationSec
+      )
+      repository.postGameplayVideo(post).fold(
+        onSuccess = { _statusMessage.value = "🎬 Gameplay postada no feed com sucesso!" },
+        onFailure = { _errorMessage.value = "Erro ao postar vídeo: ${it.message}" }
+      )
+    }
+  }
+
+  fun likeVideo(postId: String, currentLikes: Long, likedList: List<String>) {
+    viewModelScope.launch {
+      repository.likeGameplayVideo(postId, currentUserId, currentLikes, likedList)
+    }
+  }
+
+  fun commentVideo(postId: String, text: String, username: String) {
+    viewModelScope.launch {
+      val comment = com.example.data.VideoComment(
+        userId = currentUserId,
+        username = username,
+        text = text
+      )
+      repository.commentOnVideo(postId, comment)
+    }
+  }
+
+  fun observeCommentsForPost(postId: String) = repository.observeVideoComments(postId)
 
   fun saveUsername(username: String, level: Int, wins: Int, selectedSkinId: String = "classic_orange") {
     val clean = username.trim()

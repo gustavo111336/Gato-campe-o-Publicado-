@@ -881,6 +881,140 @@ class MultiplayerRepository(private val db: FirebaseFirestore) {
     }
   }
 
+  suspend fun blockUser(currentUserId: String, targetUserId: String, currentBlockedCsv: String): Result<String> {
+    val set = currentBlockedCsv.split(",").map { it.trim() }.filter { it.isNotBlank() }.toMutableSet()
+    set.add(targetUserId)
+    val nextCsv = set.joinToString(",")
+    val docRef = db.collection("users").document(currentUserId)
+    return try {
+      docRef.update(mapOf("blockedUserIdsCsv" to nextCsv, "updatedAt" to FieldValue.serverTimestamp())).await()
+      Result.success(nextCsv)
+    } catch (e: Exception) {
+      handleFirestoreError(e, OperationType.UPDATE, docRef.path)
+      Result.failure(e)
+    }
+  }
+
+  suspend fun unblockUser(currentUserId: String, targetUserId: String, currentBlockedCsv: String): Result<String> {
+    val set = currentBlockedCsv.split(",").map { it.trim() }.filter { it.isNotBlank() }.toMutableSet()
+    set.remove(targetUserId)
+    val nextCsv = set.joinToString(",")
+    val docRef = db.collection("users").document(currentUserId)
+    return try {
+      docRef.update(mapOf("blockedUserIdsCsv" to nextCsv, "updatedAt" to FieldValue.serverTimestamp())).await()
+      Result.success(nextCsv)
+    } catch (e: Exception) {
+      handleFirestoreError(e, OperationType.UPDATE, docRef.path)
+      Result.failure(e)
+    }
+  }
+
+  fun observeGameplayVideos(): Flow<List<GameplayVideoPost>> {
+    val path = "gameplayVideos"
+    return db.collection("gameplayVideos")
+      .orderBy("createdAt", Query.Direction.DESCENDING)
+      .limit(50)
+      .snapshots()
+      .map { snap ->
+        snap.toObjects(GameplayVideoPost::class.java, DocumentSnapshot.ServerTimestampBehavior.ESTIMATE)
+      }
+      .catch { error ->
+        val firestoreError = generateSequence(error) { it.cause }
+          .filterIsInstance<FirebaseFirestoreException>()
+          .firstOrNull()
+        if (firestoreError == null && error is CancellationException) throw error
+        handleFirestoreError(firestoreError ?: error, OperationType.LIST, path)
+        throw error
+      }
+  }
+
+  suspend fun postGameplayVideo(post: GameplayVideoPost): Result<Unit> {
+    val docId = post.postId.ifBlank { UUID.randomUUID().toString() }
+    val docRef = db.collection("gameplayVideos").document(docId)
+    val payload = mapOf(
+      "postId" to docId,
+      "userId" to post.userId,
+      "username" to post.username.take(24),
+      "userSkinId" to post.userSkinId.take(64),
+      "title" to post.title.take(120),
+      "score" to post.score,
+      "modeName" to post.modeName.take(64),
+      "durationSec" to post.durationSec,
+      "likes" to 0L,
+      "likedByUserIds" to emptyList<String>(),
+      "commentsCount" to 0L,
+      "createdAt" to FieldValue.serverTimestamp()
+    )
+    return try {
+      docRef.set(payload).await()
+      Result.success(Unit)
+    } catch (e: Exception) {
+      handleFirestoreError(e, OperationType.CREATE, docRef.path)
+      Result.failure(e)
+    }
+  }
+
+  suspend fun likeGameplayVideo(postId: String, currentUserId: String, currentLikes: Long, likedList: List<String>): Result<Unit> {
+    val docRef = db.collection("gameplayVideos").document(postId)
+    val isAlreadyLiked = likedList.contains(currentUserId)
+    val nextLiked = if (isAlreadyLiked) likedList - currentUserId else likedList + currentUserId
+    val nextLikes = if (isAlreadyLiked) (currentLikes - 1).coerceAtLeast(0L) else currentLikes + 1L
+
+    return try {
+      docRef.update(
+        mapOf(
+          "likes" to nextLikes,
+          "likedByUserIds" to nextLiked
+        )
+      ).await()
+      Result.success(Unit)
+    } catch (e: Exception) {
+      handleFirestoreError(e, OperationType.UPDATE, docRef.path)
+      Result.failure(e)
+    }
+  }
+
+  suspend fun commentOnVideo(postId: String, comment: VideoComment): Result<Unit> {
+    val commentId = comment.commentId.ifBlank { UUID.randomUUID().toString() }
+    val postRef = db.collection("gameplayVideos").document(postId)
+    val commentRef = postRef.collection("comments").document(commentId)
+    val payload = mapOf(
+      "commentId" to commentId,
+      "userId" to comment.userId,
+      "username" to comment.username.take(24),
+      "text" to comment.text.take(280),
+      "createdAt" to FieldValue.serverTimestamp()
+    )
+    return try {
+      db.runBatch { batch ->
+        batch.set(commentRef, payload)
+        batch.update(postRef, "commentsCount", FieldValue.increment(1))
+      }.await()
+      Result.success(Unit)
+    } catch (e: Exception) {
+      handleFirestoreError(e, OperationType.CREATE, commentRef.path)
+      Result.failure(e)
+    }
+  }
+
+  fun observeVideoComments(postId: String): Flow<List<VideoComment>> {
+    val path = "gameplayVideos/$postId/comments"
+    return db.collection("gameplayVideos").document(postId).collection("comments")
+      .orderBy("createdAt", Query.Direction.ASCENDING)
+      .snapshots()
+      .map { snap ->
+        snap.toObjects(VideoComment::class.java, DocumentSnapshot.ServerTimestampBehavior.ESTIMATE)
+      }
+      .catch { error ->
+        val firestoreError = generateSequence(error) { it.cause }
+          .filterIsInstance<FirebaseFirestoreException>()
+          .firstOrNull()
+        if (firestoreError == null && error is CancellationException) throw error
+        handleFirestoreError(firestoreError ?: error, OperationType.LIST, path)
+        throw error
+      }
+  }
+
   private fun generateRoomCode(): String {
     val chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
     return (1..6).map { chars[Random.nextInt(chars.length)] }.joinToString("")
